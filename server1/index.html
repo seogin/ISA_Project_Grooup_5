@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lab 5 - Patient Database Client</title>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Patient Database Management</h1>
+            <p>Lab 5 - Database Introduction</p>
+        </header>
+
+        <main>
+            <section class="insert-section">
+                <h2>A. Insert Default Patients</h2>
+                <p>Click the button below to insert predefined patient data:</p>
+                <button id="insertButton" class="primary-btn">Insert Default Patients</button>
+                <div id="insertResponse" class="response-area"></div>
+            </section>
+
+            <section class="query-section">
+                <h2>B. Custom SQL Query</h2>
+                <p>Enter a SELECT or INSERT query below:</p>
+                <div class="query-form">
+                    <textarea 
+                        id="queryInput" 
+                        placeholder="Enter your SQL query here (SELECT or INSERT only)&#10;Example: SELECT * FROM patient"
+                        rows="6">
+                    </textarea>
+                    <button id="submitQuery" class="primary-btn">Submit Query</button>
+                </div>
+                <div id="queryResponse" class="response-area"></div>
+            </section>
+        </main>
+
+        <footer>
+            <p>COMP 4537 - Internet Software Architecture</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
