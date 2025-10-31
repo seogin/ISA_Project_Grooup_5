@@ -1,221 +1,342 @@
-/*
-Claude Sonnet 4 (https://claude.ai/) was used to generate the following code solutions in this assignment:
+require('dotenv').config({ path: `${__dirname}/.env` });
 
-    1. API Route Handling - The handleInsertDefault(), handleCustomQuery(), and handleGetQuery() functions for processing different types of database operations.
+const express = require('express');
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
-    2. Error Handling - Comprehensive try-catch blocks with proper HTTP status codes and JSON error responses.
+const { getDatabase } = require('./database');
 
-    3. Database Integration - The server startup sequence with database connection validation and graceful shutdown handling.
+const PORT = Number(process.env.PORT || process.env.SERVER_PORT || 4000);
+const HOST = process.env.SERVER_HOST || '0.0.0.0';
+const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
+const FREE_API_LIMIT = Number(process.env.FREE_API_LIMIT || 20);
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@admin.com').toLowerCase();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '111';
+const DEMO_EMAIL = (process.env.DEMO_EMAIL || 'john@john.com').toLowerCase();
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD || '123';
+const MODEL_ID = process.env.HF_MODEL_ID || 'Xenova/distilgpt2';
 
-*/
+const isProduction = process.env.NODE_ENV === 'production';
+const secureCookies = isProduction || process.env.COOKIE_SECURE === 'true';
+const sameSitePolicy = secureCookies ? 'none' : 'lax';
 
-// Load environment variables (always try .env file, then use platform env vars)
-try {
-  require('dotenv').config({ path: __dirname + '/.env' });
-  console.log('Loaded .env file successfully');
-} catch (error) {
-  console.log('Dotenv not available, using platform environment variables only');
-}
-const http = require('http');
-const url = require('url');
-const Database = require('./database');
-const STRINGS = require('./lang/messages/en/user');
+const allowedOrigins = (process.env.CLIENT_ORIGINS || 'http://localhost:3000,http://localhost:5173,http://localhost:5500')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
 
-const db = new Database();
+const app = express();
 
-function setCORSHeaders(response) {
-  response.setHeader('Access-Control-Allow-Origin', '*');
-  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  response.setHeader('Content-Type', 'application/json');
-}
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, origin);
+    } else {
+      callback(new Error('Origin not allowed by CORS policy'));
+    }
+  },
+  credentials: true,
+}));
+app.use(cookieParser());
+app.use(express.json({ limit: '2mb' }));
 
-function parsePostData(request) { // Declares function that takes HTTP request object as parameter
-  return new Promise((resolve, reject) => { // Returns Promise for async operation with resolve/reject callbacks
-    let body = ''; // Initialize empty string to accumulate all data chunks
-    request.on('data', chunk => { // Listen for 'data' events when chunks of data arrive from client
-      body += chunk.toString(); // Convert Buffer chunk to string and append to body variable
-    });
-    request.on('end', () => { // Listen for 'end' event when all data has been received
-      try { // Start try-catch block to handle potential JSON parsing errors
-        const data = JSON.parse(body); // Parse the complete body string as JSON
-        resolve(data); // If parsing succeeds, fulfill Promise with parsed data
-      } catch (error) { // If JSON parsing fails, catch the error
-        reject(error); // Reject Promise with the parsing error
-      }
-    });
-    request.on('error', error => { // Listen for any errors during request processing
-      reject(error); // If request error occurs, reject Promise with that error
-    });
-  });
-}
-
-// This block of code below was assisted by Claude Sonnet 4 (https://claude.ai/)
-async function handleInsertDefault(response) { // Async function to handle inserting default patients, takes HTTP response object
-  try { // Start try-catch block to handle any database errors
-    const result = await db.insertDefaultPatients(); // Call database method to insert 4 predefined patients, wait for completion
-    response.writeHead(200); // Set HTTP status code to 200 (OK) indicating success
-    response.end(JSON.stringify(result)); // Send the result back to client as JSON string and end response
-  } catch (error) { // If any error occurs during database operation
-    response.writeHead(500); // Set HTTP status code to 500 (Internal Server Error)
-    response.end(JSON.stringify({ // Send error response as JSON
-      success: false, // Indicate operation failed
-      message: STRINGS.RESPONSES.ERROR_SERVER, // Use predefined server error message from strings file
-      error: error.message // Include the actual error message for debugging
-    }));
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && 'body' in err) {
+    return res.status(400).json({ success: false, message: 'Invalid JSON payload' });
   }
+  return next(err);
+});
+
+function buildUsagePayload(user) {
+  const total = Number(user.api_calls_used || 0);
+  const remaining = Math.max(0, FREE_API_LIMIT - total);
+  return {
+    total,
+    remaining,
+    limit: FREE_API_LIMIT,
+  };
 }
 
-// This block of code below was assisted by Claude Sonnet 4 (https://claude.ai/)
-async function handleCustomQuery(request, response) { // Async function to handle custom SQL queries from client
-  try { // Start try-catch block to handle parsing and database errors
-    const data = await parsePostData(request); // Parse the JSON data from POST request body
-    
-    if (!data.query) { // Check if the query field is missing or empty
-      response.writeHead(400); // Set HTTP status code to 400 (Bad Request)
-      response.end(JSON.stringify({ // Send error response as JSON
-        success: false, // Indicate operation failed
-        message: STRINGS.RESPONSES.ERROR_MISSING_QUERY // Use predefined missing query error message
-      }));
-      return; // Exit function early since query is missing
+function mapUserRecord(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    apiCallsUsed: Number(user.api_calls_used || 0),
+    freeCallsRemaining: Math.max(0, FREE_API_LIMIT - Number(user.api_calls_used || 0)),
+    freeCallLimit: FREE_API_LIMIT,
+    createdAt: user.created_at,
+    lastLoginAt: user.last_login_at,
+    lastRequestAt: user.last_request_at,
+  };
+}
+
+let generatorPromise = null;
+async function loadGenerator() {
+  if (!generatorPromise) {
+    console.log(`Loading Hugging Face model: ${MODEL_ID}`);
+    generatorPromise = import('@xenova/transformers')
+      .then(({ pipeline }) => pipeline('text-generation', MODEL_ID))
+      .then(pipelineInstance => {
+        console.log('Model loaded successfully');
+        return pipelineInstance;
+      })
+      .catch(error => {
+        generatorPromise = null;
+        console.error('Failed to load model', error);
+        throw error;
+      });
+  }
+  return generatorPromise;
+}
+
+function getTokenFromRequest(req) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7);
+  }
+  if (req.cookies?.token) {
+    return req.cookies.token;
+  }
+  return null;
+}
+
+async function authenticateRequest(req, res, next) {
+  try {
+    const token = getTokenFromRequest(req);
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    const result = await db.executeQuery(data.query); // Execute the SQL query using database class
-    const statusCode = result.success ? 200 : 400; // Set status code: 200 if successful, 400 if query failed
-    
-    response.writeHead(statusCode); // Set the determined HTTP status code
-    response.end(JSON.stringify(result)); // Send query result back to client as JSON
-  } catch (error) { // If any error occurs during request parsing or database operation
-    response.writeHead(500); // Set HTTP status code to 500 (Internal Server Error)
-    response.end(JSON.stringify({ // Send error response as JSON
-      success: false, // Indicate operation failed
-      message: STRINGS.RESPONSES.ERROR_SERVER, // Use predefined server error message
-      error: error.message // Include actual error message for debugging
-    }));
-  }
-}
-
-// This block of code below was assisted by Claude Sonnet 4 (https://claude.ai/)
-async function handleGetQuery(request, response) { // Async function to handle GET requests with SQL queries in URL path
-  try { // Start try-catch block to handle URL parsing and database errors
-    const parsedUrl = url.parse(request.url, true); // Parse the incoming URL to extract components (pathname, query params, etc.)
-    const pathParts = parsedUrl.pathname.split('/'); // Split URL path by '/' to get array of path segments
-    
-    if (pathParts.length >= 4 && pathParts[3] === 'sql') { // Check if URL has at least 4 parts and 4th part is 'sql' (/api/v1/sql/query)
-      const query = decodeURIComponent(pathParts[4] || ''); // Extract and decode the SQL query from 5th path segment (URL encoded)
-      
-      if (!query) { // Check if query is empty or missing after decoding
-        response.writeHead(400); // Set HTTP status to 400 (Bad Request) for missing query
-        response.end(JSON.stringify({ // Send error response as JSON
-          success: false, // Indicate operation failed
-          message: STRINGS.RESPONSES.ERROR_MISSING_QUERY // Use predefined missing query error message
-        }));
-        return; // Exit function early since no query to process
-      }
-
-      const result = await db.executeQuery(query); // Execute the decoded SQL query using database class
-      const statusCode = result.success ? 200 : 400; // Set status code: 200 if query successful, 400 if query failed
-      
-      response.writeHead(statusCode); // Set the determined HTTP status code
-      response.end(JSON.stringify(result)); // Send query result back to client as JSON
-    } else { // If URL path doesn't match expected pattern (/api/v1/sql/...)
-      response.writeHead(404); // Set HTTP status to 404 (Not Found) for invalid endpoint
-      response.end(JSON.stringify({ // Send error response as JSON
-        success: false, // Indicate operation failed
-        message: 'Endpoint not found' // Indicate the requested endpoint doesn't exist
-      }));
+    const payload = jwt.verify(token, JWT_SECRET);
+    const db = await getDatabase();
+    const user = await db.get('SELECT * FROM users WHERE id = ?', payload.sub);
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid authentication token' });
     }
-  } catch (error) { // If any error occurs during URL parsing or database operation
-    response.writeHead(500); // Set HTTP status to 500 (Internal Server Error)
-    response.end(JSON.stringify({ // Send error response as JSON
-      success: false, // Indicate operation failed
-      message: STRINGS.RESPONSES.ERROR_SERVER, // Use predefined server error message
-      error: error.message // Include actual error message for debugging
-    }));
+
+    req.authenticatedUser = user;
+    return next();
+  } catch (error) {
+    console.error('Authentication error:', error.message);
+    return res.status(401).json({ success: false, message: 'Authentication failed' });
   }
 }
 
-const server = http.createServer(async (request, response) => { // Create HTTP server with async callback for each request
-  setCORSHeaders(response); // Set CORS headers to allow cross-origin requests from different domains
-  
-  // Handle preflight OPTIONS requests for CORS
-  if (request.method === 'OPTIONS') {
-    response.writeHead(200);
-    response.end();
+function requireAdmin(req, res, next) {
+  if (req.authenticatedUser?.role !== 'admin') {
+    return res.status(403).json({ success: false, message: 'Admin privileges required' });
+  }
+  return next();
+}
+
+async function ensureSeedUsers(db) {
+  await ensureUserExists(db, ADMIN_EMAIL, ADMIN_PASSWORD, 'admin');
+  await ensureUserExists(db, DEMO_EMAIL, DEMO_PASSWORD, 'user');
+}
+
+async function ensureUserExists(db, email, password, role) {
+  const existing = await db.get('SELECT id FROM users WHERE email = ?', email);
+  if (existing) {
     return;
   }
-
-  const parsedUrl = url.parse(request.url, true); // Parse incoming URL to extract pathname and query parameters
-  const pathname = parsedUrl.pathname; // Extract just the path part of URL (e.g., '/api/v1/sql')
-
-  try { // Start try-catch block to handle any routing or processing errors
-    if (request.method === 'POST') { // Check if incoming request is a POST method
-      if (pathname === '/api/v1/patients/default') { // Route for inserting default patients via POST
-        await handleInsertDefault(response); // Call function to insert 4 predefined patients
-      } else if (pathname === '/api/v1/sql') { // Route for custom SQL queries via POST
-        await handleCustomQuery(request, response); // Call function to handle custom SQL from request body
-      } else { // If POST request doesn't match any known endpoints
-        response.writeHead(404); // Set HTTP status to 404 (Not Found)
-        response.end(JSON.stringify({ // Send error response as JSON
-          success: false, // Indicate operation failed
-          message: 'Endpoint not found' // Indicate the requested endpoint doesn't exist
-        }));
-      }
-    } else if (request.method === 'GET') { // Check if incoming request is a GET method
-      if (pathname.startsWith('/api/v1/sql/')) { // Route for SQL queries embedded in URL path (for SELECT)
-        await handleGetQuery(request, response); // Call function to handle SQL query from URL
-      } else { // If GET request doesn't match any known endpoints
-        response.writeHead(404); // Set HTTP status to 404 (Not Found)
-        response.end(JSON.stringify({ // Send error response as JSON
-          success: false, // Indicate operation failed
-          message: 'Endpoint not found' // Indicate the requested endpoint doesn't exist
-        }));
-      }
-    } else { // If request method is neither POST nor GET (e.g., PUT, DELETE, PATCH)
-      response.writeHead(405); // Set HTTP status to 405 (Method Not Allowed)
-      response.end(JSON.stringify({ // Send error response as JSON
-        success: false, // Indicate operation failed
-        message: STRINGS.RESPONSES.ERROR_METHOD // Use predefined method not allowed error message
-      }));
-    }
-  } catch (error) { // If any unexpected error occurs during request processing
-    response.writeHead(500); // Set HTTP status to 500 (Internal Server Error)
-    response.end(JSON.stringify({ // Send error response as JSON
-      success: false, // Indicate operation failed
-      message: STRINGS.RESPONSES.ERROR_SERVER, // Use predefined server error message
-      error: error.message // Include actual error message for debugging
-    }));
-  }
-});
-
-// This block of code below was assisted by Claude Sonnet 4 (https://claude.ai/)
-async function startServer() { // Async function to initialize and start the HTTP server
-  const connected = await db.connect(); // Attempt to connect to MySQL database
-  if (!connected) { // If database connection failed
-    console.error('Failed to connect to database. Exiting...'); // Log error message
-    process.exit(1); // Exit the application with error code 1
-  }
-
-  const port = process.env.PORT || process.env.SERVER_PORT || 3000; // Get port from environment variable or default to 3000
-  const host = '0.0.0.0'; // Force 0.0.0.0 for hosting platform compatibility
-  
-  // Debug logging for environment variables
-  console.log('Environment variables:');
-  console.log('- NODE_ENV:', process.env.NODE_ENV);
-  console.log('- PORT:', process.env.PORT);
-  console.log('- SERVER_PORT:', process.env.SERVER_PORT);
-  console.log('- SERVER_HOST:', process.env.SERVER_HOST);
-  console.log('Final configuration - Port:', port, 'Host:', host);
-  
-  server.listen(port, host, () => { // Start the HTTP server listening on specified port and host
-    console.log(`${STRINGS.SERVER.STARTUP} ${port} on ${host}`); // Log server startup message with port and host
-  });
+  const passwordHash = await bcrypt.hash(password, 12);
+  await db.run(
+    'INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)',
+    email,
+    passwordHash,
+    role
+  );
+  console.log(`Seeded ${role} account for ${email}`);
 }
 
-process.on('SIGINT', async () => { // Listen for Ctrl+C (SIGINT signal) to gracefully shutdown
-  console.log('Shutting down server...'); // Log shutdown message
-  await db.close(); // Close database connection properly
-  process.exit(0); // Exit the application with success code 0
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', model: MODEL_ID });
 });
 
-startServer(); // Call the function to start the server
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const db = await getDatabase();
+    const { email, password } = req.body || {};
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const plainPassword = typeof password === 'string' ? password.trim() : '';
+
+    if (!normalizedEmail || !plainPassword) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid email address' });
+    }
+
+    if (plainPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
+    }
+
+    const existingUser = await db.get('SELECT id FROM users WHERE email = ?', normalizedEmail);
+    if (existingUser) {
+      return res.status(409).json({ success: false, message: 'An account with this email already exists' });
+    }
+
+    const passwordHash = await bcrypt.hash(plainPassword, 12);
+    await db.run(
+      'INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)',
+      normalizedEmail,
+      passwordHash,
+      'user'
+    );
+
+    return res.status(201).json({ success: true, message: 'Registration successful. Please sign in.' });
+  } catch (error) {
+    console.error('Registration error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to register user at this time' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const db = await getDatabase();
+    const { email, password } = req.body || {};
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const plainPassword = typeof password === 'string' ? password : '';
+
+    if (!normalizedEmail || !plainPassword) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
+
+    const user = await db.get('SELECT * FROM users WHERE email = ?', normalizedEmail);
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    const passwordMatches = await bcrypt.compare(plainPassword, user.password_hash);
+    if (!passwordMatches) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    await db.run(
+      'UPDATE users SET last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      user.id
+    );
+
+    const token = jwt.sign({ sub: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: secureCookies,
+      sameSite: sameSitePolicy,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    const freshUser = await db.get('SELECT * FROM users WHERE id = ?', user.id);
+
+    return res.json({ success: true, user: mapUserRecord(freshUser) });
+  } catch (error) {
+    console.error('Login error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to sign in at this time' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('token', { httpOnly: true, secure: secureCookies, sameSite: sameSitePolicy });
+  res.json({ success: true });
+});
+
+app.get('/api/auth/me', authenticateRequest, async (req, res) => {
+  const user = mapUserRecord(req.authenticatedUser);
+  res.json({ success: true, user });
+});
+
+app.post('/api/ai/generate', authenticateRequest, async (req, res) => {
+  try {
+    const { prompt } = req.body || {};
+    const trimmedPrompt = typeof prompt === 'string' ? prompt.trim() : '';
+
+    if (!trimmedPrompt) {
+      return res.status(400).json({ success: false, message: 'Prompt text is required' });
+    }
+
+    const generator = await loadGenerator();
+    const output = await generator(trimmedPrompt, {
+      max_new_tokens: Number(process.env.HF_MAX_NEW_TOKENS || 80),
+      temperature: Number(process.env.HF_TEMPERATURE || 0.7),
+      top_k: 50,
+      top_p: 0.95,
+    });
+
+    const generatedText = Array.isArray(output) && output[0]?.generated_text
+      ? output[0].generated_text
+      : '';
+
+    const db = await getDatabase();
+    await db.run(
+      'UPDATE users SET api_calls_used = api_calls_used + 1, updated_at = CURRENT_TIMESTAMP, last_request_at = CURRENT_TIMESTAMP WHERE id = ?',
+      req.authenticatedUser.id
+    );
+
+    const refreshedUser = await db.get('SELECT * FROM users WHERE id = ?', req.authenticatedUser.id);
+    const usage = buildUsagePayload(refreshedUser);
+    const limitReached = refreshedUser.api_calls_used >= FREE_API_LIMIT;
+
+    const responsePayload = {
+      success: true,
+      prompt: trimmedPrompt,
+      generatedText,
+      usage,
+      limitReached,
+    };
+
+    if (limitReached) {
+      responsePayload.message = 'You have reached the limit of free AI calls. Additional usage will still work but may incur charges in the future.';
+    }
+
+    return res.json(responsePayload);
+  } catch (error) {
+    console.error('AI generation error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to generate AI response' });
+  }
+});
+
+app.get('/api/admin/users', authenticateRequest, requireAdmin, async (req, res) => {
+  try {
+    const db = await getDatabase();
+    const users = await db.all('SELECT * FROM users ORDER BY created_at ASC');
+    const payload = users.map(mapUserRecord);
+    return res.json({ success: true, users: payload });
+  } catch (error) {
+    console.error('Admin users fetch error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load user usage data' });
+  }
+});
+
+app.use((err, req, res, next) => {
+  if (err.message === 'Origin not allowed by CORS policy') {
+    return res.status(403).json({ success: false, message: err.message });
+  }
+  console.error('Unhandled error:', err);
+  return res.status(500).json({ success: false, message: 'Internal server error' });
+});
+
+async function startServer() {
+  try {
+    const db = await getDatabase();
+    await ensureSeedUsers(db);
+
+    app.listen(PORT, HOST, () => {
+      console.log(`Server listening on http://${HOST}:${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
+
+process.on('SIGINT', async () => {
+  console.log('Received SIGINT. Shutting down...');
+  const db = await getDatabase();
+  await db.close();
+  process.exit(0);
+});

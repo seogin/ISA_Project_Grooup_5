@@ -3,40 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lab 5 - Patient Database Client</title>
+    <title>AI Text Companion</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Patient Database Management</h1>
-            <p>Lab 5 - Database Introduction</p>
+    <div class="app-shell">
+        <header class="app-header">
+            <h1>AI Text Companion</h1>
+            <p class="tagline">Interact with our self-hosted Hugging Face model after signing in.</p>
         </header>
 
-        <main>
-            <section class="insert-section">
-                <h2>A. Insert Default Patients</h2>
-                <p>Click the button below to insert predefined patient data:</p>
-                <button id="insertButton" class="primary-btn">Insert Default Patients</button>
-                <div id="insertResponse" class="response-area"></div>
+        <main class="app-main">
+            <section id="authSection" class="card">
+                <h2>Get Started</h2>
+                <p class="card-intro">Create a free account or sign in with the provided demo credentials.</p>
+                <div class="panels">
+                    <form id="registerForm" class="panel">
+                        <h3>Create Account</h3>
+                        <label for="registerEmail">Email</label>
+                        <input id="registerEmail" name="email" type="email" placeholder="you@example.com" required>
+
+                        <label for="registerPassword">Password</label>
+                        <input id="registerPassword" name="password" type="password" placeholder="Minimum 6 characters" required>
+
+                        <button type="submit" class="primary">Register</button>
+                        <p class="helper">Demo user: <strong>john@john.com</strong> / <strong>123</strong></p>
+                        <div id="registerMessage" class="message" role="alert"></div>
+                    </form>
+
+                    <form id="loginForm" class="panel">
+                        <h3>Sign In</h3>
+                        <label for="loginEmail">Email</label>
+                        <input id="loginEmail" name="email" type="email" placeholder="you@example.com" required>
+
+                        <label for="loginPassword">Password</label>
+                        <input id="loginPassword" name="password" type="password" placeholder="Your password" required>
+
+                        <button type="submit" class="primary">Log In</button>
+                        <p class="helper">Admin: <strong>admin@admin.com</strong> / <strong>111</strong></p>
+                        <div id="loginMessage" class="message" role="alert"></div>
+                    </form>
+                </div>
             </section>
 
-            <section class="query-section">
-                <h2>B. Custom SQL Query</h2>
-                <p>Enter a SELECT or INSERT query below:</p>
-                <div class="query-form">
-                    <textarea 
-                        id="queryInput" 
-                        placeholder="Enter your SQL query here (SELECT or INSERT only)&#10;Example: SELECT * FROM patient"
-                        rows="6">
-                    </textarea>
-                    <button id="submitQuery" class="primary-btn">Submit Query</button>
+            <section id="dashboardSection" class="card hidden" aria-live="polite">
+                <div class="card-header">
+                    <div>
+                        <h2 id="welcomeHeading">Welcome!</h2>
+                        <p id="usageSummary" class="muted"></p>
+                    </div>
+                    <button id="logoutButton" class="secondary">Log Out</button>
                 </div>
-                <div id="queryResponse" class="response-area"></div>
+
+                <div id="limitNotice" class="banner hidden"></div>
+
+                <div class="panel">
+                    <h3>Ask the AI</h3>
+                    <p class="muted">Enter a prompt and our on-premise Hugging Face model will craft a continuation.</p>
+                    <textarea id="promptInput" rows="5" placeholder="Tell a short bedtime story about a curious robot..."></textarea>
+                    <button id="generateButton" class="primary">Generate Response</button>
+                    <div id="generateMessage" class="message" role="status"></div>
+                </div>
+
+                <article id="aiResponseCard" class="panel hidden">
+                    <h3>AI Response</h3>
+                    <pre id="aiResponse" class="response-text"></pre>
+                </article>
+            </section>
+
+            <section id="adminSection" class="card hidden">
+                <div class="card-header">
+                    <h2>Admin Control Center</h2>
+                </div>
+                <p class="muted">Monitor API usage for every account in real time.</p>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Calls Used</th>
+                                <th>Free Calls Left</th>
+                                <th>Last Login</th>
+                                <th>Last Request</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminTableBody"></tbody>
+                    </table>
+                </div>
+                <div id="adminMessage" class="message" role="status"></div>
             </section>
         </main>
 
-        <footer>
-            <p>COMP 4537 - Internet Software Architecture</p>
+        <footer class="app-footer">
+            <small>ISA Term Project &middot; AI model: <span id="modelName">Loading…</span></small>
         </footer>
     </div>
 

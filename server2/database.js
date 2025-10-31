@@ -1,152 +1,44 @@
-/*
+const path = require('path');
+const sqlite3 = require('sqlite3');
+const { open } = require('sqlite');
 
-Claude Sonnet 4 (https://claude.ai/) was used to generate the following code solutions in this assignment:
-  
-  1. Table Creation Logic - The automated table creation with Engine=InnoDB specification and IF NOT EXISTS condition for proper database schema management.
-  
-  2. The isQuerySafe(), insertPatient(), executeQuery() method for blocking dangerous SQL operations (UPDATE, DELETE, DROP) while allowing only SELECT and INSERT queries.
+const DEFAULT_DB_FILE = process.env.DB_FILE || path.join(__dirname, 'app-data.sqlite3');
 
-  3. Database Class Structure - The object-oriented approach using ES6 classes for organizing database operations and connection management.
+let databasePromise = null;
 
-*/
+async function createDatabaseConnection() {
+  const db = await open({
+    filename: DEFAULT_DB_FILE,
+    driver: sqlite3.Database,
+  });
 
-const mysql = require('mysql2/promise');
-const STRINGS = require('./lang/messages/en/user');
+  await db.exec('PRAGMA foreign_keys = ON;');
+  await db.exec('PRAGMA journal_mode = WAL;');
 
-class Database {
-  constructor() {
-    this.connection = null;
-  }
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user',
+      api_calls_used INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_login_at TEXT,
+      last_request_at TEXT
+    )
+  `);
 
-  async connect() {
-    try {
-      console.log('DB Config:', {
-        host: process.env.DB_HOST,
-        port: process.env.DB_PORT,
-        user: process.env.DB_USER,
-        database: process.env.DB_NAME
-      });
-      
-      this.connection = await mysql.createConnection({
-        host: process.env.DB_HOST,
-        port: process.env.DB_PORT,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME
-      });
-      
-      console.log(STRINGS.SERVER.DB_CONNECTED);
-      await this.createTable();
-      return true;
-    } catch (error) {
-      console.error(STRINGS.SERVER.DB_ERROR, error.message);
-      return false;
-    }
-  }
-
-  // This block of code below was assisted by Claude Sonnet 4 (https://claude.ai/)
-  async createTable() {
-    try {
-      await this.connection.execute(STRINGS.CREATE_TABLE_QUERY);
-      console.log(STRINGS.SERVER.TABLE_CREATED);
-    } catch (error) {
-      console.error('Table creation error:', error.message);
-      throw error;
-    }
-  }
-
-  // This block of code below was assisted by Claude Sonnet 4 (https://claude.ai/)
-  async insertPatient(name, dateOfBirth) {
-    try {
-      const [result] = await this.connection.execute(
-        STRINGS.INSERT_PATIENT_QUERY,
-        [name, dateOfBirth]
-      );
-      return {
-        success: true,
-        message: STRINGS.RESPONSES.SUCCESS_INSERT,
-        insertId: result.insertId
-      };
-    } catch (error) {
-      console.error('Insert error:', error.message);
-      return {
-        success: false,
-        message: STRINGS.RESPONSES.ERROR_DATABASE,
-        error: error.message
-      };
-    }
-  }
-
-  async insertDefaultPatients() {
-    try {
-      const results = [];
-      for (const patient of STRINGS.DEFAULT_PATIENTS) {
-        const result = await this.insertPatient(patient.name, patient.dateOfBirth);
-        results.push(result);
-      }
-      return {
-        success: true,
-        message: `Inserted ${results.length} patients`,
-        results: results
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: STRINGS.RESPONSES.ERROR_DATABASE,
-        error: error.message
-      };
-    }
-  }
-
-  // This block of code below was assisted by Claude Sonnet 4 (https://claude.ai/)
-  isQuerySafe(query) {
-    const upperQuery = query.toUpperCase().trim();
-    
-    for (const operation of STRINGS.SECURITY.BLOCKED_OPERATIONS) {
-      if (upperQuery.includes(operation)) {
-        return false;
-      }
-    }
-    
-    if (!upperQuery.startsWith('SELECT') && !upperQuery.startsWith('INSERT')) {
-      return false;
-    }
-    
-    return true;
-  }
-
-  // This block of code below was assisted by Claude Sonnet 4 (https://claude.ai/)
-  async executeQuery(query) {
-    try {
-      if (!this.isQuerySafe(query)) {
-        return {
-          success: false,
-          message: STRINGS.SECURITY.BLOCKED_MESSAGE
-        };
-      }
-
-      const [rows] = await this.connection.execute(query);
-      
-      return {
-        success: true,
-        message: STRINGS.RESPONSES.SUCCESS_SELECT,
-        data: rows
-      };
-    } catch (error) {
-      console.error('Query execution error:', error.message);
-      return {
-        success: false,
-        message: STRINGS.RESPONSES.ERROR_DATABASE,
-        error: error.message
-      };
-    }
-  }
-
-  async close() {
-    if (this.connection) {
-      await this.connection.end();
-    }
-  }
+  return db;
 }
 
-module.exports = Database;
+async function getDatabase() {
+  if (!databasePromise) {
+    databasePromise = createDatabaseConnection();
+  }
+  return databasePromise;
+}
+
+module.exports = {
+  getDatabase,
+};

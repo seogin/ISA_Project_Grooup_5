@@ -1,3 +1,4 @@
 .env
 server2/.env
 server2/node_modules
+server2/app-data.sqlite3
