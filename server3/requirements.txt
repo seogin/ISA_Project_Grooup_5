@@ -1,0 +1,8 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+huggingface_hub==0.24.5
+TTS==0.22.0
+python-multipart==0.0.17
+soundfile==0.12.1
+requests==2.32.3
+
