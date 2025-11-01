@@ -5,4 +5,4 @@ TTS==0.22.0
 python-multipart==0.0.17
 soundfile==0.12.1
 requests==2.32.3
-
+numpy<2.0.0

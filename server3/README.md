@@ -41,7 +41,11 @@ Only the Python files are required for deployment.  The `samples/` folder is opt
    The service will try to download the model the first time it boots. If your production environment blocks outbound traffic, you can pre-download it:
 
    ```bash
-   python -m huggingface_hub download coqui/XTTS-v2 --local-dir ./models/coqui_xtts_v2 --exclude "*.onnx" "*.tflite"
+   huggingface-cli download coqui/XTTS-v2 --local-dir ./models/coqui_xtts_v2 --exclude "*.onnx" "*.tflite"
+   then 
+   export XTTS_MODEL_DIR="$(pwd)/models/coqui_xtts_v2"
+
+
    ```
 
    Afterwards, point the app to that folder by setting `XTTS_MODEL_DIR=$(pwd)/models/coqui_xtts_v2`.
@@ -49,6 +53,11 @@ Only the Python files are required for deployment.  The `samples/` folder is opt
 3. **(Optional) Provide a default voice sample**
 
    XTTS requires a short reference clip (~3–5 seconds) to clone a speaker. Place the clip inside `samples/` (WAV, 16 kHz or 22.05 kHz). Update `.env` or the environment variable `XTTS_DEFAULT_VOICE` to the absolute path of that file.
+
+   say "This is my reference voice." -o samples/voice.aiff
+   ffmpeg -i samples/voice.aiff -ar 16000 -ac 1 samples/voice.wav
+   export XTTS_DEFAULT_VOICE="$(pwd)/samples/voice.wav"
+
 
 4. **Run the API**
    ```bash
