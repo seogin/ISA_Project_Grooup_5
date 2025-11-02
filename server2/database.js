@@ -26,7 +26,7 @@ class Database {
         host: process.env.DB_HOST,
         port: process.env.DB_PORT,
         user: process.env.DB_USER,
-        database: process.env.DB_NAME
+        database: process.env.DB_DATABASE
       });
       
       this.connection = await mysql.createConnection({
@@ -34,7 +34,7 @@ class Database {
         port: process.env.DB_PORT,
         user: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME
+        database: process.env.DB_DATABASE
       });
       
       console.log(STRINGS.SERVER.DB_CONNECTED);
