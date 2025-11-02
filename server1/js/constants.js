@@ -8,3 +8,5 @@ const UI_STRINGS = {
     ERROR_UNAUTHORIZED: 'You must be logged in to use this service. Please register or login.',
     API_LIMIT_WARNING: 'You have reached your maximum free API calls (20). Service continues with warning.'
 };
+
+export { UI_STRINGS };
