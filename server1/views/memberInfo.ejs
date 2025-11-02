@@ -1,9 +1,39 @@
-<%- include("templates/header", {scripts: ["https://code.jquery.com/jquery-3.6.3.js","/script.js"]}) %> 
+<%- include("templates/header", {scripts: ["https://code.jquery.com/jquery-3.6.3.js","/script.js"]}) %>
     <h1>Hello <%= username %><% if (user_type=='admin') { %><%= " (admin)" %><% } %>!</h1>
     <div>
-        This page has javascript, jquery and AJAX! 
+        This page has javascript, jquery and AJAX!
     </div>
     <div id="dynamic_content">
         <img src="../public/Spinner.gif">
     </div>
-<%- include("templates/footer") %> 
+
+    <section id="tts-widget" data-tts-base-url="<%= typeof ttsBaseUrl !== 'undefined' ? ttsBaseUrl : '' %>" class="mt-8 bg-white/60 rounded-md shadow-md shadow-black/20 p-6 space-y-4">
+        <div>
+            <h2 class="text-xl font-semibold">AI Voice Demo</h2>
+            <p class="text-sm text-gray-700">Generate spoken audio using our XTTS service. Enter some text, choose a language and voice, then click synthesize to hear it.</p>
+        </div>
+
+        <div class="grid gap-4 md:grid-cols-2">
+            <label class="flex flex-col text-sm font-medium text-gray-700">
+                Language
+                <select id="ttsLanguageSelect" class="mt-1 rounded border border-gray-300 p-2 bg-white"></select>
+            </label>
+            <label class="flex flex-col text-sm font-medium text-gray-700">
+                Voice
+                <select id="ttsVoiceSelect" class="mt-1 rounded border border-gray-300 p-2 bg-white"></select>
+            </label>
+        </div>
+
+        <label class="block text-sm font-medium text-gray-700">
+            Text to speak
+            <textarea id="ttsTextInput" rows="4" class="mt-1 w-full rounded border border-gray-300 p-2" placeholder="Type something for the AI voice to say"></textarea>
+        </label>
+
+        <div class="flex flex-wrap items-center gap-4">
+            <button id="ttsSpeakBtn" class="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed" type="button">Synthesize speech</button>
+            <span id="ttsStatus" class="text-sm text-gray-700"></span>
+        </div>
+
+        <audio id="ttsAudio" controls class="hidden w-full"></audio>
+    </section>
+<%- include("templates/footer") %>
