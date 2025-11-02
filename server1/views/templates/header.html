@@ -1,12 +1,27 @@
-<header class="w-full bg-green-600 text-white">
-  <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-    <a href="index.html" class="font-semibold">ISA Project</a>
-    <nav class="space-x-4 text-sm">
-      <a class="hover:underline" href="index.html">Home</a>
-      <a class="hover:underline" href="about.html">About</a>
-      <a class="hover:underline" href="contact.html">Contact</a>
-      <a class="hover:underline" href="login.html">Login</a>
-      <a class="hover:underline" href="createUser.html">Sign Up</a>
-    </nav>
-  </div>
+<header class="antialiased">
+  <nav class="bg-white px-4 h-12 lg:px-6 py-2.5 dark:bg-gray-800">
+    <div class="flex flex-wrap items-center justify-between">
+
+      <a href="home.html" class="text-lg font-bold text-gray-900 dark:text-white">ISA Project - TTS</a>
+
+      <div class="flex items-center justify-end">
+        <p id="user-name-placeholder" class=" text-md text-center text-gray-500 dark:text-gray-400 mr-6">
+          Username
+        </p>
+        <!-- Log out -->
+        <button type="button"
+          class="p-1 text-gray-500 rounded-lg hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700 focus:ring-4 focus:ring-gray-300 dark:focus:ring-gray-600">
+          <span class="sr-only">Log out</span>
+          <!-- Log out icon -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            class="lucide lucide-log-out-icon lucide-log-out">
+            <path d="m16 17 5-5-5-5" />
+            <path d="M21 12H9" />
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </nav>
 </header>
