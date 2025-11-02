@@ -10,8 +10,9 @@ Claude Sonnet 4 (https://claude.ai/) was used to generate the following code sol
 */
 
 // Load environment variables (always try .env file, then use platform env vars)
+const path = require('path');
 try {
-  require('dotenv').config({ path: __dirname + '/.env' });
+  require('dotenv').config({ path: path.join(__dirname, '../.env') });
   console.log('Loaded .env file successfully');
 } catch (error) {
   console.log('Dotenv not available, using platform environment variables only');
