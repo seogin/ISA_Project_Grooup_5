@@ -1,0 +1,9 @@
+# Large model checkpoints and generated artefacts
+models/
+voices/voices.json
+voices/*.wav
+generated/*.wav
+venv/
+.venv/
+__pycache__/
+*.pyc
