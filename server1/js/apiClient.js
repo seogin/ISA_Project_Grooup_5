@@ -1,6 +1,6 @@
 // Uses fetch with JSON, attaches token if present
 
-import { BACKEND_SERVER_URL } from "./constants.js";
+import { AI_SERVER_URL, BACKEND_SERVER_URL } from "./constants.js";
 import { getToken, clearToken } from "./auth.js";
 
 async function makeRequest(path, { method = "GET", body, auth = false } = {}) {
@@ -64,3 +64,27 @@ export const api = {
       body: { email, code, password },
     }),
 };
+
+export const aiApi = {
+  synthesizeSpeech: ({ text, language, speakerId, speakerWavBase64 }) => {
+    if (!text) {
+      throw new Error("Text is required when requesting speech synthesis.");
+    }
+
+    const payload = {
+      text,
+      ...(language ? { language } : {}),
+      // API expects snake_case keys; omit undefined optional values
+      ...(speakerId ? { speaker_id: speakerId } : {}),
+      ...(speakerWavBase64 ? { speaker_wav_base64: speakerWavBase64 } : {}),
+    };
+
+    return makeRequest("/synthesize", {
+      method: "POST",
+      body: payload,
+      baseUrl: AI_SERVER_URL,
+      credentials: "omit",
+    });
+  },
+};
+
