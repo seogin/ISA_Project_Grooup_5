@@ -1,11 +1,8 @@
 // Small DOM helpers used by page scripts
 
-export const $ = (selector, root = document) => root.querySelector(selector);
-export const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
-
-export function on(el, event, handler, options) {
-  el.addEventListener(event, handler, options);
-  return () => el.removeEventListener(event, handler, options);
+export function on(element, event, handler, options) {
+  element.addEventListener(event, handler, options);
+  return () => element.removeEventListener(event, handler, options);
 }
 
 export function onSubmit(form, handler) {
@@ -15,17 +12,17 @@ export function onSubmit(form, handler) {
   });
 }
 
-export function setDisabled(el, isDisabled) {
-  if (!el) return;
-  el.disabled = !!isDisabled;
+export function setDisabled(element, isDisabled) {
+  if (!element) return;
+  element.disabled = !!isDisabled;
 }
 
-export function show(el) {
-  if (!el) return;
-  el.classList.remove('hidden');
+export function show(element) {
+  if (!element) return;
+  element.classList.remove('hidden');
 }
 
-export function hide(el) {
-  if (!el) return;
-  el.classList.add('hidden');
+export function hide(element) {
+  if (!element) return;
+  element.classList.add('hidden');
 }

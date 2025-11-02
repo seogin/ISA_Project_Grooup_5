@@ -1,31 +1,38 @@
 // Uses fetch with JSON, attaches token if present
 
-import { BACKEND_SERVER_URL } from './constants.js';
-import { getToken } from './auth.js';
+import { BACKEND_SERVER_URL } from "./constants.js";
+import { getToken, clearToken } from "./auth.js";
 
-async function request(path, { method = 'GET', body, auth = false } = {}) {
-  const headers = { 'Content-Type': 'application/json' };
+async function makeRequest(path, { method = "GET", body, auth = false } = {}) {
+  const headers = { "Content-Type": "application/json" };
   if (auth) {
     const token = getToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`; // Attach JWT if available
+    if (token) headers["Authorization"] = `Bearer ${token}`; // Attach JWT if available
   }
 
-  const res = await fetch(`${BACKEND_SERVER_URL}${path}`, {
+  const respond = await fetch(`${BACKEND_SERVER_URL}${path}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
+    credentials: "include",
   });
+
+  if (respond.status === 401 && auth) {
+    clearToken();
+    window.location.href = "login.html";
+    return;
+  }
 
   // Attempt JSON; if it fails, create a uniform error
   let data;
   try {
-    data = await res.json();
+    data = await respond.json();
   } catch (_) {
-    data = { success: res.ok };
+    data = { success: respond.ok };
   }
 
-  if (!res.ok) {
-    const message = data?.message || `Request failed (${res.status})`;
+  if (!respond.ok) {
+    const message = data?.message || `Request failed (${respond.status})`;
     throw new Error(message);
   }
 
@@ -35,19 +42,25 @@ async function request(path, { method = 'GET', body, auth = false } = {}) {
 // Temporary endpoints in one place for easy use
 export const api = {
   login: (email, password) =>
-    request('/auth/login', { method: 'POST', body: { email, password } }),
+    makeRequest("/auth/login", { method: "POST", body: { email, password } }),
 
   signup: (email, password) =>
-    request('/auth/signup', { method: 'POST', body: { email, password } }),
+    makeRequest("/auth/signup", { method: "POST", body: { email, password } }),
 
-  me: () => request('/auth/me', { method: 'GET', auth: true }),
+  currentUser: () => makeRequest("/auth/me", { method: "GET", auth: true }),
 
   requestPasswordReset: (email) =>
-    request('/auth/password/request', { method: 'POST', body: { email } }),
+    makeRequest("/auth/password/request", { method: "POST", body: { email } }),
 
   verifyResetCode: (email, code) =>
-    request('/auth/password/verify', { method: 'POST', body: { email, code } }),
+    makeRequest("/auth/password/verify", {
+      method: "POST",
+      body: { email, code },
+    }),
 
   resetPassword: (email, code, password) =>
-    request('/auth/password/reset', { method: 'POST', body: { email, code, password } }),
+    makeRequest("/auth/password/reset", {
+      method: "POST",
+      body: { email, code, password },
+    }),
 };

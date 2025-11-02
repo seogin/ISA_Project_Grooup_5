@@ -4,14 +4,14 @@
 
 import { api } from './apiClient.js';
 import { getSavedEmailForReset, getSavedResetCode, clearResetFlow } from './auth.js';
-import { $, onSubmit, setDisabled } from './dom.js';
 
-const form = $('form');
-const passwordInput = $('#password');
-const confirmInput = $('#confirm-password');
-const submitBtn = $('#reset-password-btn');
+const resetPwForm = document.getElementById('reset-password-form');
+const passwordInput = document.getElementById('password');
+const confirmInput = document.getElementById('confirm-password');
+const submitBtn = document.getElementById('reset-password-btn');
 
-onSubmit(form, async () => {
+resetPwForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
   const email = getSavedEmailForReset();
   const code = getSavedResetCode();
 
@@ -27,7 +27,7 @@ onSubmit(form, async () => {
     return;
   }
 
-  setDisabled(submitBtn, true);
+  if (submitBtn) submitBtn.disabled = true;
   try {
     await api.resetPassword(email, code, password);
     clearResetFlow();
@@ -35,6 +35,6 @@ onSubmit(form, async () => {
   } catch (err) {
     alert(err.message || 'Password reset failed');
   } finally {
-    setDisabled(submitBtn, false);
+    if (submitBtn) submitBtn.disabled = false;
   }
 });

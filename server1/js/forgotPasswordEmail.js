@@ -4,20 +4,20 @@
 
 import { api } from './apiClient.js';
 import { saveEmailForReset } from './auth.js';
-import { $, onSubmit, setDisabled } from './dom.js';
 
-const form = $('form');
-const emailInput = $('#email');
-const submitBtn = $('#send-pw-reset-code-btn');
+const pwRecoveryEmailForm = document.getElementById('pw-recovery-email-form');
+const emailInput = document.getElementById('email');
+const submitBtn = document.getElementById('send-pw-reset-code-btn');
 
-onSubmit(form, async () => {
+pwRecoveryEmailForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
   const email = emailInput.value.trim();
   if (!email) {
     alert('Please enter your email');
     return;
   }
 
-  setDisabled(submitBtn, true);
+  if (submitBtn) submitBtn.disabled = true;
   try {
     await api.requestPasswordReset(email);
     saveEmailForReset(email);
@@ -25,6 +25,6 @@ onSubmit(form, async () => {
   } catch (err) {
     alert(err.message || 'Failed to send reset code');
   } finally {
-    setDisabled(submitBtn, false);
+    if (submitBtn) submitBtn.disabled = false;
   }
 });

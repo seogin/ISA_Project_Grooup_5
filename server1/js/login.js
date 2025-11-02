@@ -3,46 +3,59 @@
 // - Calls placeholder /auth/login endpoint
 // - Stores token and redirects to home.html
 
-import { api } from './apiClient.js';
-import { setToken, redirectIfAuthenticated } from './auth.js';
-import { $, on, onSubmit, setDisabled } from './dom.js';
+import { api } from "./apiClient.js";
+import { setToken, redirectIfAuthenticated } from "./auth.js";
 
 // If user is already logged in, skip the page
-redirectIfAuthenticated('home.html');
+redirectIfAuthenticated("home.html");
 
-const form = $('form');
-const emailInput = $('#email');
-const passwordInput = $('#password');
-const submitBtn = $('#login-btn');
+const loginForm = document.getElementById("login-form");
+const emailInput = document.getElementById("email");
+const passwordInput = document.getElementById("password");
+const submitBtn = document.getElementById("login-btn");
 
 async function handleLogin() {
-  setDisabled(submitBtn, true);
+  if (submitBtn) submitBtn.disabled = true;
   try {
     const email = emailInput.value.trim();
     const password = passwordInput.value;
 
-    // Call placeholder login endpoint
-    const res = await api.login(email, password);
+    messageDiv.innerHTML = `<div class="p-2 text-sm text-sky-500 dark:text-sky-400 rounded-lg">Logging in...</div>`;
 
-    // Expect token in response; adjust to your API shape
-    const token = res.token || res.data?.token || 'demo-token';
-    setToken(token);
+    try {
+      // Call placeholder login endpoint
+      const respond = await api.login(email, password);
 
-    // Navigate to home on success
-    window.location.href = 'home.html';
-  } catch (err) {
-    alert(err.message || 'Login failed');
+      if (respond.success) {
+        const token = respond.token || respond.data?.token;
+        setToken(token);
+
+        messageDiv.innerHTML = `<div class="p-2 text-sm text-green-600 bg-green-50 dark:bg-green-900 dark:text-green-400 rounded-lg" role="alert">Success! ${respond.message}</div>`;
+
+        setTimeout(() => {
+          window.location.href = "/home.html?authenticated=true";
+        }, 2000);
+      } else {
+        messageDiv.innerHTML = `<div class="p-2 text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-400 rounded-lg" role="alert">Error: ${result.message}</div>`;
+      }
+    } catch (error) {
+      messageDiv.innerHTML = `<div class="p-2 text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-400 rounded-lg" role="alert">Network error: Could not connect to the server.</div>`;
+      console.error("Login error:", error);
+    }
   } finally {
-    setDisabled(submitBtn, false);
+    if (submitBtn) submitBtn.disabled = false;
   }
 }
 
 // Prevent inline onclick navigation when we handle click
-on(submitBtn, 'click', (e) => {
+submitBtn?.addEventListener("click", (e) => {
   e.preventDefault();
   e.stopImmediatePropagation();
   handleLogin();
 });
 
 // Also handle full form submit (e.g., Enter key)
-onSubmit(form, () => handleLogin());
+loginForm?.addEventListener("submit", (e) => {
+  e.preventDefault();
+  handleLogin();
+});
