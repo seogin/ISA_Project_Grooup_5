@@ -1,20 +1,26 @@
 // Uses fetch with JSON, attaches token if present
 
-import { BACKEND_SERVER_URL } from "./constants.js";
+import { AI_SERVER_URL, BACKEND_SERVER_URL } from "./constants.js";
 import { getToken, clearToken } from "./auth.js";
 
-async function makeRequest(path, { method = "GET", body, auth = false } = {}) {
+async function makeRequest(
+  pathOrUrl,
+  { method = "GET", body, auth = false, baseUrl = BACKEND_SERVER_URL, credentials = "include" } = {}
+) {
   const headers = { "Content-Type": "application/json" };
   if (auth) {
     const token = getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`; // Attach JWT if available
   }
 
-  const respond = await fetch(`${BACKEND_SERVER_URL}${path}`, {
+  const isAbsoluteUrl = /^https?:\/\//i.test(pathOrUrl);
+  const url = isAbsoluteUrl ? pathOrUrl : `${baseUrl}${pathOrUrl}`;
+
+  const respond = await fetch(url, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
-    credentials: "include",
+    credentials,
   });
 
   if (respond.status === 401 && auth) {
@@ -63,4 +69,27 @@ export const api = {
       method: "POST",
       body: { email, code, password },
     }),
+};
+
+export const aiApi = {
+  synthesizeSpeech: ({ text, language, speakerId, speakerWavBase64 }) => {
+    if (!text) {
+      throw new Error("Text is required when requesting speech synthesis.");
+    }
+
+    const payload = {
+      text,
+      ...(language ? { language } : {}),
+      // API expects snake_case keys; omit undefined optional values
+      ...(speakerId ? { speaker_id: speakerId } : {}),
+      ...(speakerWavBase64 ? { speaker_wav_base64: speakerWavBase64 } : {}),
+    };
+
+    return makeRequest("/synthesize", {
+      method: "POST",
+      body: payload,
+      baseUrl: AI_SERVER_URL,
+      credentials: "omit",
+    });
+  },
 };
