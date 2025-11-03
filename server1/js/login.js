@@ -13,6 +13,7 @@ const loginForm = document.getElementById("login-form");
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 const submitBtn = document.getElementById("login-btn");
+const messageDiv = document.getElementById("message");
 
 async function handleLogin() {
   if (submitBtn) submitBtn.disabled = true;
@@ -33,10 +34,10 @@ async function handleLogin() {
         messageDiv.innerHTML = `<div class="p-2 text-sm text-green-600 bg-green-50 dark:bg-green-900 dark:text-green-400 rounded-lg" role="alert">Success! ${respond.message}</div>`;
 
         setTimeout(() => {
-          window.location.href = "/home.html?authenticated=true";
+          window.location.href = "/views/home.html?authenticated=true";
         }, 2000);
       } else {
-        messageDiv.innerHTML = `<div class="p-2 text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-400 rounded-lg" role="alert">Error: ${result.message}</div>`;
+        messageDiv.innerHTML = `<div class="p-2 text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-400 rounded-lg" role="alert">Error: ${respond.message}</div>`;
       }
     } catch (error) {
       messageDiv.innerHTML = `<div class="p-2 text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-400 rounded-lg" role="alert">Network error: Could not connect to the server.</div>`;

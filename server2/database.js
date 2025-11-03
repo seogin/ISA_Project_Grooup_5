@@ -13,6 +13,7 @@ Claude Sonnet 4 (https://claude.ai/) was used to generate the following code sol
 */
 
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcrypt');
 const STRINGS = require('./lang/messages/en/user');
 
 class Database {
@@ -23,18 +24,18 @@ class Database {
   async connect() {
     try {
       console.log('DB Config:', {
-        host: process.env.DB_HOST,
-        port: process.env.DB_PORT,
-        user: process.env.DB_USER,
-        database: process.env.DB_NAME
+        host: process.env.MYSQL_HOST,
+        port: process.env.MYSQL_PORT,
+        user: process.env.MYSQL_USER,
+        database: process.env.MYSQL_DATABASE
       });
       
       this.connection = await mysql.createConnection({
-        host: process.env.DB_HOST,
-        port: process.env.DB_PORT,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME
+        host: process.env.MYSQL_HOST,
+        port: process.env.MYSQL_PORT,
+        user: process.env.MYSQL_USER,
+        password: process.env.MYSQL_PASSWORD,
+        database: process.env.MYSQL_DATABASE
       });
       
       console.log(STRINGS.SERVER.DB_CONNECTED);
@@ -65,7 +66,7 @@ class Database {
   }
 
   // This block of code below was assisted by Claude Sonnet 4 (https://claude.ai/)
-  async insertUser(email, passwordHash, firstName, lastName, isAdmin = false) {
+  async insertUser(email, passwordHash, firstName, lastName = null, isAdmin = false) {
     try {
       const [result] = await this.connection.execute(
         'INSERT INTO user (email, password_hash, first_name, last_name, is_admin) VALUES (?, ?, ?, ?, ?)',
@@ -74,10 +75,18 @@ class Database {
       return {
         success: true,
         message: STRINGS.RESPONSES.SUCCESS_INSERT,
-        insertId: result.insertId
+        insertId: result.insertId,
+        userId: result.insertId
       };
     } catch (error) {
       console.error('Insert user error:', error.message);
+      if (error.code === 'ER_DUP_ENTRY') {
+        return {
+          success: false,
+          message: 'Email already exists',
+          error: error.message
+        };
+      }
       return {
         success: false,
         message: STRINGS.RESPONSES.ERROR_DATABASE,
@@ -175,6 +184,110 @@ class Database {
         message: STRINGS.RESPONSES.ERROR_DATABASE,
         error: error.message
       };
+    }
+  }
+
+  async findUserByEmail(email) {
+    try {
+      const [rows] = await this.connection.execute(
+        'SELECT user_id, email, password_hash, first_name, last_name, is_admin, api_calls_used, api_calls_limit, account_status FROM user WHERE email = ?',
+        [email]
+      );
+      return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+      console.error('Find user by email error:', error.message);
+      return null;
+    }
+  }
+
+  async getUserById(userId) {
+    try {
+      const [rows] = await this.connection.execute(
+        'SELECT user_id, email, first_name, last_name, is_admin, api_calls_used, api_calls_limit, account_status FROM user WHERE user_id = ?',
+        [userId]
+      );
+      return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+      console.error('Get user by ID error:', error.message);
+      return null;
+    }
+  }
+
+  async verifyPassword(plainPassword, hashedPassword) {
+    try {
+      return await bcrypt.compare(plainPassword, hashedPassword);
+    } catch (error) {
+      console.error('Password verification error:', error.message);
+      return false;
+    }
+  }
+
+  async hashPassword(password) {
+    try {
+      const saltRounds = 10;
+      return await bcrypt.hash(password, saltRounds);
+    } catch (error) {
+      console.error('Password hashing error:', error.message);
+      throw error;
+    }
+  }
+
+  async incrementApiCalls(userId) {
+    try {
+      await this.connection.execute(
+        'UPDATE user SET api_calls_used = api_calls_used + 1 WHERE user_id = ?',
+        [userId]
+      );
+      return true;
+    } catch (error) {
+      console.error('Increment API calls error:', error.message);
+      return false;
+    }
+  }
+
+  async checkApiLimit(userId) {
+    try {
+      const [rows] = await this.connection.execute(
+        'SELECT api_calls_used, api_calls_limit FROM user WHERE user_id = ?',
+        [userId]
+      );
+      if (rows.length === 0) return { exceeded: false, used: 0, limit: 0 };
+      
+      const { api_calls_used, api_calls_limit } = rows[0];
+      return {
+        exceeded: api_calls_used >= api_calls_limit,
+        used: api_calls_used,
+        limit: api_calls_limit
+      };
+    } catch (error) {
+      console.error('Check API limit error:', error.message);
+      return { exceeded: false, used: 0, limit: 0 };
+    }
+  }
+
+  async logApiUsage(userId, endpoint, method) {
+    try {
+      await this.connection.execute(
+        'INSERT INTO api_usage_log (user_id, endpoint, method) VALUES (?, ?, ?)',
+        [userId, endpoint, method]
+      );
+      return true;
+    } catch (error) {
+      console.error('Log API usage error:', error.message);
+      return false;
+    }
+  }
+
+  async updateLastLogin(userId) {
+    try {
+      await this.connection.execute(
+        'UPDATE user SET last_login = CURRENT_TIMESTAMP WHERE user_id = ?',
+        [userId]
+      );
+      return true;
+    } catch (error) {
+      console.error('Update last login error:', error.message);
+      return false;
     }
   }
 
