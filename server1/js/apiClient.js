@@ -130,7 +130,7 @@ export const aiApi = {
       method: "POST",
       body: payload,
       baseUrl: AI_SERVER_URL,
-      credentials: "omit",
+      credentials: "include",
     });
   },
 };
