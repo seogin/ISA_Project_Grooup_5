@@ -109,10 +109,21 @@ All request and response contracts live in `main.py` and are validated with Pyda
 - `coqui/XTTS-v2` needs ~6 GB of RAM to run comfortably on CPU.  For production, provision a VM with at least 8 GB of RAM or attach a GPU and set `XTTS_USE_GPU=true`.
 - Remember to hash filenames or store them outside the web root if you enable persistent storage to avoid leaking user-provided speech.
 
+## Digital Ocean Deployment
+
+When deploying to Digital Ocean App Platform, ensure you have a `runtime.txt` file in the `server3/` directory specifying Python 3.9-3.11:
+
+```
+python-3.11.9
+```
+
+The `TTS==0.22.0` package requires Python >=3.9.0 and <3.12. If your deployment shows version compatibility errors, verify that Digital Ocean is using Python 3.9, 3.10, or 3.11 (not 3.12 or higher).
+
 ## Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
+| `ERROR: Ignored the following versions that require a different python version` | Ensure `runtime.txt` specifies Python 3.9, 3.10, or 3.11. TTS 0.22.0 does not support Python 3.12+. |
 | `ModuleNotFoundError: TTS` | Ensure `pip install -r requirements.txt` ran in the active virtualenv. |
 | `RuntimeError: "ninja" is required to load c++ extensions` | Install build tools (`sudo apt install build-essential ninja-build`). |
 | `OSError: Tunnel connection failed` | Your environment blocks outbound HTTPS. Download the model manually and point `XTTS_MODEL_DIR` to the offline copy. |
