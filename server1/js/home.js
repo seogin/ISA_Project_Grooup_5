@@ -4,7 +4,7 @@
 
 import { requireAuth } from "./auth.js";
 import { api, aiApi, showApiLimitWarning, hideApiLimitWarning } from './apiClient.js';
-import base64WavToObjectUrl from "./audio.js";
+import { base64WavToObjectUrl } from "./audio.js";
 
 requireAuth("login.html");
 
