@@ -111,18 +111,32 @@ All request and response contracts live in `main.py` and are validated with Pyda
 
 ## Digital Ocean Deployment
 
-When deploying to Digital Ocean App Platform, ensure you have a `runtime.txt` file in the `server3/` directory specifying Python 3.9-3.11:
+When deploying to Digital Ocean App Platform:
 
-```
-python-3.11.9
-```
+1. **Python Version**: Ensure you have a `runtime.txt` file in the `server3/` directory:
+   ```
+   python-3.11.9
+   ```
+   The `TTS==0.22.0` package requires Python >=3.9.0 and <3.12.
 
-The `TTS==0.22.0` package requires Python >=3.9.0 and <3.12. If your deployment shows version compatibility errors, verify that Digital Ocean is using Python 3.9, 3.10, or 3.11 (not 3.12 or higher).
+2. **Build Command** (to prevent CUDA dependencies): 
+   - In Digital Ocean App Platform settings, set the **Build Command** to:
+     ```bash
+     chmod +x server3/build.sh && server3/build.sh && pip install -r server3/requirements.txt
+     ```
+   - This installs CPU-only PyTorch first, preventing the installation of large NVIDIA CUDA libraries that cause "no space left on device" errors.
+   
+   Alternatively, if your App Platform uses a Procfile, you can run the build script manually during the build phase.
+
+3. **Environment Variables** (optional):
+   - Set `XTTS_USE_GPU=false` to ensure CPU-only mode
+   - Set `XTTS_MODEL_DIR` if you've pre-downloaded the model
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
+| `no space left on device` during build | Use `build.sh` script to install CPU-only PyTorch first. This prevents installation of large CUDA libraries (~6GB+). Set build command in Digital Ocean: `chmod +x server3/build.sh && server3/build.sh && pip install -r server3/requirements.txt` |
 | `ERROR: Ignored the following versions that require a different python version` | Ensure `runtime.txt` specifies Python 3.9, 3.10, or 3.11. TTS 0.22.0 does not support Python 3.12+. |
 | `ModuleNotFoundError: TTS` | Ensure `pip install -r requirements.txt` ran in the active virtualenv. |
 | `RuntimeError: "ninja" is required to load c++ extensions` | Install build tools (`sudo apt install build-essential ninja-build`). |

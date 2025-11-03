@@ -1,3 +1,6 @@
+# Note: PyTorch CPU-only is installed via build.sh to prevent CUDA dependencies
+# Do not add torch/torchaudio here - they are installed separately in build.sh
+
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 huggingface_hub==0.24.5
