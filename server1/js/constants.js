@@ -1,5 +1,5 @@
 // API base URL for backend server (cannot use env vars in frontend)
-export const BACKEND_SERVER_URL = 'http://localhost:3000/api';
+export const BACKEND_SERVER_URL = 'https://comp4537-group5-9lwth.ondigitalocean.app/';
 
 // Base URL for the standalone AI (text-to-speech) microservice
 export const AI_SERVER_URL = 'http://localhost:8081/api/v1/tts';
