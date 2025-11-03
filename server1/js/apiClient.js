@@ -84,8 +84,8 @@ export const api = {
   login: (email, password) =>
     makeRequest("/auth/login", { method: "POST", body: { email, password } }),
 
-  signup: (firstName, email, password) =>
-    makeRequest("/auth/signup", { method: "POST", body: { firstName, email, password } }),
+  signup: (email, password) =>
+    makeRequest("/auth/signup", { method: "POST", body: { email, password } }),
 
   currentUser: () => makeRequest("/auth/me", { method: "GET", auth: true }),
 

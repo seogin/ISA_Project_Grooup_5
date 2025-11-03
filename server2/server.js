@@ -122,11 +122,11 @@ async function handleSignup(request, response) {
   try {
     const data = await parsePostData(request);
     
-    if (!data.email || !data.password || !data.firstName) {
+    if (!data.email || !data.password) {
       response.writeHead(400);
       response.end(JSON.stringify({
         success: false,
-        message: 'Email, password, and first name are required'
+        message: 'Email and password are required'
       }));
       return;
     }
@@ -144,7 +144,7 @@ async function handleSignup(request, response) {
     
     // Hash password and create user
     const passwordHash = await db.hashPassword(data.password);
-    const result = await db.insertUser(data.email, passwordHash, data.firstName, data.lastName || null);
+    const result = await db.insertUser(data.email, passwordHash, null, data.lastName || null);
     
     if (!result.success) {
       response.writeHead(400);

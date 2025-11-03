@@ -9,7 +9,6 @@ import { setToken, redirectIfAuthenticated } from "./auth.js";
 redirectIfAuthenticated("home.html");
 
 const signupForm = document.getElementById("signup-form");
-const firstNameInput = document.getElementById("first-name");
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 const confirmInput = document.getElementById("confirm-password");
@@ -18,15 +17,9 @@ const messageDiv = document.getElementById("message");
 
 signupForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const firstName = firstNameInput.value.trim();
   const email = emailInput.value.trim();
   const password = passwordInput.value;
   const confirm = confirmInput.value;
-
-  if (!firstName) {
-    messageDiv.innerHTML = `<div class="p-2 text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-400 rounded-lg" role="alert">First name is required.</div>`;
-    return;
-  }
 
   if (password !== confirm) {
     messageDiv.innerHTML = `<div class="p-2 text-sm text-red-600 bg-red-50 dark:bg-red-900 dark:text-red-400 rounded-lg" role="alert">Passwords do not match.</div>`;
@@ -37,7 +30,7 @@ signupForm?.addEventListener("submit", async (e) => {
 
   if (submitBtn) submitBtn.disabled = true;
   try {
-    const respond = await api.signup(firstName, email, password);
+    const respond = await api.signup(email, password);
     if (respond.success) {
       const token = respond.token || respond.data?.token;
       setToken(token);
