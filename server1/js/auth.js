@@ -33,6 +33,8 @@ export function clearToken() {
 }
 
 // Check if user is authenticated
+// Note: httpOnly cookies cannot be read by JavaScript, so we check localStorage
+// The server will verify via cookies automatically, but for client-side checks we use localStorage
 export function isAuthenticated() {
   return !!getToken();
 }
@@ -73,4 +75,12 @@ export function redirectIfAuthenticated(target = "home.html") {
   if (isAuthenticated()) {
     window.location.href = target;
   }
+}
+
+// Logout function - clears token and redirects to login
+export function logout() {
+  clearToken();
+  // Clear httpOnly cookie by making a logout request (optional)
+  // For now, just clear localStorage and redirect
+  window.location.href = "login.html";
 }

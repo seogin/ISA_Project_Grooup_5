@@ -1,7 +1,42 @@
 // Uses fetch with JSON, attaches token if present
 
-import { AI_SERVER_URL, BACKEND_SERVER_URL } from "./constants.js";
+import { AI_SERVER_URL, BACKEND_SERVER_URL, UI_STRINGS } from "./constants.js";
 import { getToken, clearToken } from "./auth.js";
+
+// Global function to show API limit warning (can be called from anywhere)
+export function showApiLimitWarning(message) {
+  const warningDiv = document.getElementById("api-limit-warning");
+  if (warningDiv) {
+    warningDiv.classList.remove("hidden");
+    warningDiv.innerHTML = `
+      <div class="bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 mb-4 rounded" role="alert">
+        <div class="flex">
+          <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-amber-400" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+            </svg>
+          </div>
+          <div class="ml-3">
+            <p class="text-sm font-medium">${message || UI_STRINGS.API_LIMIT_WARNING}</p>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+}
+
+export function hideApiLimitWarning() {
+  const warningDiv = document.getElementById("api-limit-warning");
+  if (warningDiv) {
+    warningDiv.classList.add("hidden");
+  }
+}
+
+// Make it available globally for backwards compatibility
+if (typeof window !== 'undefined') {
+  window.showApiLimitWarning = showApiLimitWarning;
+  window.hideApiLimitWarning = hideApiLimitWarning;
+}
 
 async function makeRequest(path, { method = "GET", body, auth = false } = {}) {
   const headers = { "Content-Type": "application/json" };
@@ -36,6 +71,11 @@ async function makeRequest(path, { method = "GET", body, auth = false } = {}) {
     throw new Error(message);
   }
 
+  // Check for API limit warning and show it
+  if (data.apiLimitExceeded) {
+    showApiLimitWarning();
+  }
+
   return data;
 }
 
@@ -44,8 +84,8 @@ export const api = {
   login: (email, password) =>
     makeRequest("/auth/login", { method: "POST", body: { email, password } }),
 
-  signup: (email, password) =>
-    makeRequest("/auth/signup", { method: "POST", body: { email, password } }),
+  signup: (firstName, email, password) =>
+    makeRequest("/auth/signup", { method: "POST", body: { firstName, email, password } }),
 
   currentUser: () => makeRequest("/auth/me", { method: "GET", auth: true }),
 

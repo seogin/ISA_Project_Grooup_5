@@ -18,17 +18,83 @@ try {
   console.log('Dotenv not available, using platform environment variables only');
 }
 const http = require('http');
-const url = require('url');
 const Database = require('./database');
 const STRINGS = require('./lang/messages/en/user');
+const { generateToken, verifyToken, extractTokenFromCookie, extractTokenFromHeader } = require('./auth');
 
 const db = new Database();
 
-function setCORSHeaders(response) {
-  response.setHeader('Access-Control-Allow-Origin', '*');
+function setCORSHeaders(response, request) {
+  // When credentials are included, we cannot use wildcard '*'
+  // Instead, we need to reflect the request's origin
+  const origin = request.headers.origin;
+  
+  // For requests with credentials, we must use the specific origin, not '*'
+  if (origin) {
+    response.setHeader('Access-Control-Allow-Origin', origin);
+    response.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    // Only use '*' if no origin (shouldn't happen with credentials, but safe fallback)
+    response.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  
   response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   response.setHeader('Content-Type', 'application/json');
+}
+
+function setCookie(response, name, value, options = {}) {
+  const defaultOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'Lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: '/'
+  };
+  
+  const cookieOptions = { ...defaultOptions, ...options };
+  let cookieString = `${name}=${encodeURIComponent(value)}`;
+  
+  if (cookieOptions.maxAge) {
+    cookieString += `; Max-Age=${cookieOptions.maxAge}`;
+  }
+  if (cookieOptions.path) {
+    cookieString += `; Path=${cookieOptions.path}`;
+  }
+  if (cookieOptions.httpOnly) {
+    cookieString += '; HttpOnly';
+  }
+  if (cookieOptions.secure) {
+    cookieString += '; Secure';
+  }
+  if (cookieOptions.sameSite) {
+    cookieString += `; SameSite=${cookieOptions.sameSite}`;
+  }
+  
+  response.setHeader('Set-Cookie', cookieString);
+}
+
+async function authenticateRequest(request) {
+  const cookieHeader = request.headers.cookie;
+  const authHeader = request.headers.authorization;
+  
+  // Try to get token from cookie first, then from Authorization header
+  let token = extractTokenFromCookie(cookieHeader);
+  if (!token) {
+    token = extractTokenFromHeader(authHeader);
+  }
+  
+  if (!token) {
+    return null;
+  }
+  
+  const decoded = verifyToken(token);
+  if (!decoded || !decoded.userId) {
+    return null;
+  }
+  
+  const user = await db.getUserById(decoded.userId);
+  return user;
 }
 
 function parsePostData(request) { // Declares function that takes HTTP request object as parameter
@@ -51,10 +117,184 @@ function parsePostData(request) { // Declares function that takes HTTP request o
   });
 }
 
+// Authentication endpoints
+async function handleSignup(request, response) {
+  try {
+    const data = await parsePostData(request);
+    
+    if (!data.email || !data.password || !data.firstName) {
+      response.writeHead(400);
+      response.end(JSON.stringify({
+        success: false,
+        message: 'Email, password, and first name are required'
+      }));
+      return;
+    }
+    
+    // Check if user already exists
+    const existingUser = await db.findUserByEmail(data.email);
+    if (existingUser) {
+      response.writeHead(400);
+      response.end(JSON.stringify({
+        success: false,
+        message: 'Email already exists'
+      }));
+      return;
+    }
+    
+    // Hash password and create user
+    const passwordHash = await db.hashPassword(data.password);
+    const result = await db.insertUser(data.email, passwordHash, data.firstName, data.lastName || null);
+    
+    if (!result.success) {
+      response.writeHead(400);
+      response.end(JSON.stringify(result));
+      return;
+    }
+    
+    // Generate token
+    const token = generateToken(result.userId, data.email);
+    
+    // Set httpOnly cookie
+    setCookie(response, 'token', token);
+    
+    response.writeHead(200);
+    response.end(JSON.stringify({
+      success: true,
+      message: 'User registered successfully',
+      token: token,
+      userId: result.userId
+    }));
+  } catch (error) {
+    response.writeHead(500);
+    response.end(JSON.stringify({
+      success: false,
+      message: STRINGS.RESPONSES.ERROR_SERVER,
+      error: error.message
+    }));
+  }
+}
+
+async function handleLogin(request, response) {
+  try {
+    const data = await parsePostData(request);
+    
+    if (!data.email || !data.password) {
+      response.writeHead(400);
+      response.end(JSON.stringify({
+        success: false,
+        message: 'Email and password are required'
+      }));
+      return;
+    }
+    
+    // Find user
+    const user = await db.findUserByEmail(data.email);
+    if (!user) {
+      response.writeHead(401);
+      response.end(JSON.stringify({
+        success: false,
+        message: STRINGS.RESPONSES.ERROR_AUTHENTICATION
+      }));
+      return;
+    }
+    
+    // Verify password
+    const passwordValid = await db.verifyPassword(data.password, user.password_hash);
+    if (!passwordValid) {
+      response.writeHead(401);
+      response.end(JSON.stringify({
+        success: false,
+        message: STRINGS.RESPONSES.ERROR_AUTHENTICATION
+      }));
+      return;
+    }
+    
+    // Update last login
+    await db.updateLastLogin(user.user_id);
+    
+    // Generate token
+    const token = generateToken(user.user_id, user.email);
+    
+    // Set httpOnly cookie
+    setCookie(response, 'token', token);
+    
+    response.writeHead(200);
+    response.end(JSON.stringify({
+      success: true,
+      message: 'Login successful',
+      token: token,
+      user: {
+        userId: user.user_id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        apiCallsUsed: user.api_calls_used,
+        apiCallsLimit: user.api_calls_limit
+      }
+    }));
+  } catch (error) {
+    response.writeHead(500);
+    response.end(JSON.stringify({
+      success: false,
+      message: STRINGS.RESPONSES.ERROR_SERVER,
+      error: error.message
+    }));
+  }
+}
+
+async function handleCurrentUser(request, response) {
+  try {
+    const user = await authenticateRequest(request);
+    
+    if (!user) {
+      response.writeHead(401);
+      response.end(JSON.stringify({
+        success: false,
+        message: STRINGS.RESPONSES.ERROR_AUTHENTICATION
+      }));
+      return;
+    }
+    
+    // Check API limit
+    const apiLimit = await db.checkApiLimit(user.user_id);
+    
+    response.writeHead(200);
+    response.end(JSON.stringify({
+      success: true,
+      user: {
+        userId: user.user_id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        apiCallsUsed: user.api_calls_used,
+        apiCallsLimit: user.api_calls_limit,
+        apiLimitExceeded: apiLimit.exceeded
+      }
+    }));
+  } catch (error) {
+    response.writeHead(500);
+    response.end(JSON.stringify({
+      success: false,
+      message: STRINGS.RESPONSES.ERROR_SERVER,
+      error: error.message
+    }));
+  }
+}
+
 // This block of code below was assisted by Claude Sonnet 4 (https://claude.ai/)
-async function handleInsertDefault(response) { // Async function to handle inserting default patients, takes HTTP response object
+async function handleInsertDefault(response, userId) { // Async function to handle inserting default patients, takes HTTP response object
   try { // Start try-catch block to handle any database errors
-    const result = await db.insertDefaultPatients(); // Call database method to insert 4 predefined patients, wait for completion
+    const result = await db.insertDefaultData(); // Call database method to insert default data, wait for completion
+    
+    // Track API usage
+    if (userId) {
+      await db.incrementApiCalls(userId);
+      await db.logApiUsage(userId, '/api/v1/patients/default', 'POST');
+      const apiLimit = await db.checkApiLimit(userId);
+      result.apiLimitExceeded = apiLimit.exceeded;
+    }
+    
     response.writeHead(200); // Set HTTP status code to 200 (OK) indicating success
     response.end(JSON.stringify(result)); // Send the result back to client as JSON string and end response
   } catch (error) { // If any error occurs during database operation
@@ -68,7 +308,7 @@ async function handleInsertDefault(response) { // Async function to handle inser
 }
 
 // This block of code below was assisted by Claude Sonnet 4 (https://claude.ai/)
-async function handleCustomQuery(request, response) { // Async function to handle custom SQL queries from client
+async function handleCustomQuery(request, response, userId) { // Async function to handle custom SQL queries from client
   try { // Start try-catch block to handle parsing and database errors
     const data = await parsePostData(request); // Parse the JSON data from POST request body
     
@@ -82,6 +322,15 @@ async function handleCustomQuery(request, response) { // Async function to handl
     }
 
     const result = await db.executeQuery(data.query); // Execute the SQL query using database class
+    
+    // Track API usage
+    if (userId) {
+      await db.incrementApiCalls(userId);
+      await db.logApiUsage(userId, '/api/v1/sql', 'POST');
+      const apiLimit = await db.checkApiLimit(userId);
+      result.apiLimitExceeded = apiLimit.exceeded;
+    }
+    
     const statusCode = result.success ? 200 : 400; // Set status code: 200 if successful, 400 if query failed
     
     response.writeHead(statusCode); // Set the determined HTTP status code
@@ -97,9 +346,11 @@ async function handleCustomQuery(request, response) { // Async function to handl
 }
 
 // This block of code below was assisted by Claude Sonnet 4 (https://claude.ai/)
-async function handleGetQuery(request, response) { // Async function to handle GET requests with SQL queries in URL path
+async function handleGetQuery(request, response, userId) { // Async function to handle GET requests with SQL queries in URL path
   try { // Start try-catch block to handle URL parsing and database errors
-    const parsedUrl = url.parse(request.url, true); // Parse the incoming URL to extract components (pathname, query params, etc.)
+    // Use WHATWG URL API instead of deprecated url.parse()
+    const baseUrl = `http://${request.headers.host || 'localhost'}`;
+    const parsedUrl = new URL(request.url, baseUrl); // Parse the incoming URL to extract components (pathname, query params, etc.)
     const pathParts = parsedUrl.pathname.split('/'); // Split URL path by '/' to get array of path segments
     
     if (pathParts.length >= 4 && pathParts[3] === 'sql') { // Check if URL has at least 4 parts and 4th part is 'sql' (/api/v1/sql/query)
@@ -115,6 +366,15 @@ async function handleGetQuery(request, response) { // Async function to handle G
       }
 
       const result = await db.executeQuery(query); // Execute the decoded SQL query using database class
+      
+      // Track API usage
+      if (userId) {
+        await db.incrementApiCalls(userId);
+        await db.logApiUsage(userId, '/api/v1/sql', 'GET');
+        const apiLimit = await db.checkApiLimit(userId);
+        result.apiLimitExceeded = apiLimit.exceeded;
+      }
+      
       const statusCode = result.success ? 200 : 400; // Set status code: 200 if query successful, 400 if query failed
       
       response.writeHead(statusCode); // Set the determined HTTP status code
@@ -137,24 +397,59 @@ async function handleGetQuery(request, response) { // Async function to handle G
 }
 
 const server = http.createServer(async (request, response) => { // Create HTTP server with async callback for each request
-  setCORSHeaders(response); // Set CORS headers to allow cross-origin requests from different domains
+  setCORSHeaders(response, request); // Set CORS headers to allow cross-origin requests from different domains
   
   // Handle preflight OPTIONS requests for CORS
   if (request.method === 'OPTIONS') {
+    // CORS headers are already set by setCORSHeaders above
     response.writeHead(200);
     response.end();
     return;
   }
 
-  const parsedUrl = url.parse(request.url, true); // Parse incoming URL to extract pathname and query parameters
+  // Use WHATWG URL API instead of deprecated url.parse()
+  const baseUrl = `http://${request.headers.host || 'localhost'}`;
+  const parsedUrl = new URL(request.url, baseUrl); // Parse incoming URL to extract pathname and query parameters
   const pathname = parsedUrl.pathname; // Extract just the path part of URL (e.g., '/api/v1/sql')
 
   try { // Start try-catch block to handle any routing or processing errors
+    // Authentication endpoints (no auth required)
+    if (pathname === '/api/auth/signup' && request.method === 'POST') {
+      await handleSignup(request, response);
+      return;
+    }
+    
+    if (pathname === '/api/auth/login' && request.method === 'POST') {
+      await handleLogin(request, response);
+      return;
+    }
+    
+    if (pathname === '/api/auth/me' && request.method === 'GET') {
+      await handleCurrentUser(request, response);
+      return;
+    }
+    
+    // Protected endpoints - require authentication
+    let user = null;
+    if (pathname !== '/api/auth/signup' && pathname !== '/api/auth/login') {
+      user = await authenticateRequest(request);
+      if (!user) {
+        response.writeHead(401);
+        response.end(JSON.stringify({
+          success: false,
+          message: STRINGS.RESPONSES.ERROR_AUTHENTICATION
+        }));
+        return;
+      }
+    }
+    
+    const userId = user ? user.user_id : null;
+    
     if (request.method === 'POST') { // Check if incoming request is a POST method
       if (pathname === '/api/v1/patients/default') { // Route for inserting default patients via POST
-        await handleInsertDefault(response); // Call function to insert 4 predefined patients
+        await handleInsertDefault(response, userId); // Call function to insert 4 predefined patients
       } else if (pathname === '/api/v1/sql') { // Route for custom SQL queries via POST
-        await handleCustomQuery(request, response); // Call function to handle custom SQL from request body
+        await handleCustomQuery(request, response, userId); // Call function to handle custom SQL from request body
       } else { // If POST request doesn't match any known endpoints
         response.writeHead(404); // Set HTTP status to 404 (Not Found)
         response.end(JSON.stringify({ // Send error response as JSON
@@ -164,7 +459,7 @@ const server = http.createServer(async (request, response) => { // Create HTTP s
       }
     } else if (request.method === 'GET') { // Check if incoming request is a GET method
       if (pathname.startsWith('/api/v1/sql/')) { // Route for SQL queries embedded in URL path (for SELECT)
-        await handleGetQuery(request, response); // Call function to handle SQL query from URL
+        await handleGetQuery(request, response, userId); // Call function to handle SQL query from URL
       } else { // If GET request doesn't match any known endpoints
         response.writeHead(404); // Set HTTP status to 404 (Not Found)
         response.end(JSON.stringify({ // Send error response as JSON
